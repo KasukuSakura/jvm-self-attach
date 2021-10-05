@@ -111,7 +111,7 @@ publishing {
             publication.artifact(tasks.findByName('sourcesJar'))
             publication.artifact(tasks.findByName('javadocJar'))
             publication.setModuleDescriptorGenerator(null)
-            publication.artifactId('silk-codec')
+            publication.artifactId('jvm-self-attach')
 
             publication.pom {
                 name = 'Silk codec'

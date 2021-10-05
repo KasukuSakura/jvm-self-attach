@@ -10,6 +10,11 @@ Launch javaagent on self-hosted jvm.
 
 ## Usage
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.kasukusakura/jvm-self-attach.svg?label=Maven%20Central)](https://search.maven.org/search?q=g:%22io.github.kasukusakura%22%20AND%20a:%22jvm-self-attach%22)
+
+Jar was published as `io.github.kasukusakura:jvm-self-attach`
+
+
 ```java
 import io.github.kasukusakura.jsa.JvmSelfAttach;
 import java.io.File;
