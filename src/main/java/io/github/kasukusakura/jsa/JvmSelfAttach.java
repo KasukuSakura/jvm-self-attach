@@ -65,12 +65,11 @@ public class JvmSelfAttach {
         return i;
     }
 
-    private static File genEAFile(File dir, File rdfile, String cnname, String EAN, boolean boot) throws Throwable {
-        if (rdfile == null) {
-            do {
-                rdfile = new File(dir, "external-agent-" + UUID.randomUUID() + ".jar");
-            } while (rdfile.exists());
-        }
+    private static File genEAFile(File dir, String cnname) throws Throwable {
+        File rdfile;
+        do {
+            rdfile = new File(dir, "external-agent-" + UUID.randomUUID() + ".jar");
+        } while (rdfile.exists());
 
         try (ZipOutputStream zos = new ZipOutputStream(new BufferedOutputStream(
                 new FileOutputStream(rdfile)
@@ -81,32 +80,10 @@ public class JvmSelfAttach {
             mf.getMainAttributes().putValue("Premain-Class", cnname);
             mf.getMainAttributes().putValue("Agent-Class", cnname);
             mf.getMainAttributes().putValue("Launcher-Agent-Class", cnname);
-            if (boot) {
-                mf.getMainAttributes().putValue("Boot-Class-Path", rdfile.getAbsolutePath().replace('\\', '/'));
-            }
             mf.getMainAttributes().putValue("Can-Redefine-Classes", "true");
             mf.getMainAttributes().putValue("Can-Retransform-Classes", "true");
             mf.getMainAttributes().putValue("Can-Set-Native-Method-Prefix", "true");
             mf.write(zos);
-
-            zos.putNextEntry(new ZipEntry(cnname.replace('.', '/') + ".class"));
-            byte[] code = EXTERNAL_AGENT_BYTECODE;
-            code = BytecodeUtil.replace(
-                    code,
-                    EAN,
-                    cnname
-            );
-            code = BytecodeUtil.replace(
-                    code,
-                    EAN.replace('.', '/'),
-                    cnname.replace('.', '/')
-            );
-            code = BytecodeUtil.replace(
-                    code,
-                    "L" + EAN.replace('.', '/') + ";",
-                    "L" + cnname.replace('.', '/') + ";"
-            );
-            zos.write(code);
         }
         return rdfile;
     }
@@ -136,16 +113,44 @@ public class JvmSelfAttach {
                 }
             }
         }
-        File rdfile = genEAFile(tmp, null, cnname, EAN, false);
+        File rdfile = genEAFile(tmp, cnname);
+        {
+            byte[] code = EXTERNAL_AGENT_BYTECODE;
+            code = BytecodeUtil.replace(
+                    code,
+                    EAN,
+                    cnname
+            );
+            code = BytecodeUtil.replace(
+                    code,
+                    EAN.replace('.', '/'),
+                    cnname.replace('.', '/')
+            );
+            code = BytecodeUtil.replace(
+                    code,
+                    "L" + EAN.replace('.', '/') + ";",
+                    "L" + cnname.replace('.', '/') + ";"
+            );
+            UA.getUnsafe().defineClass(null, code, 0, code.length, ClassLoader.getSystemClassLoader(), null);
+        }
 
         loadAgent(cnname, EAN, rdfile);
         fetchInst(cnname);
     }
 
     private static void loadAgent(String cnname, String EAN, File rdfile) throws Throwable {
-        UA.getUnsafe();
         String absp = rdfile.getAbsolutePath();
         List<Throwable> allFails = new ArrayList<>();
+
+        try { //java.instrument
+            Method met = Class.forName("sun.instrument.InstrumentationImpl")
+                    .getDeclaredMethod("loadAgent", String.class);
+            UA.setAccessible(met, true);
+            met.invoke(null, absp);
+            return;
+        } catch (Throwable e) {
+            allFails.add(e);
+        }
 
         long pid;
         String pid_str;
@@ -214,19 +219,6 @@ public class JvmSelfAttach {
                 vm.getMethod("detach").invoke(attach);
                 return;
             }
-        } catch (Throwable e) {
-            allFails.add(e);
-        }
-        try {
-            genEAFile(null, rdfile, cnname, EAN, true);
-        } catch (Throwable ignored) {
-        }
-        try { //java.instrument
-            Method met = Class.forName("sun.instrument.InstrumentationImpl")
-                    .getDeclaredMethod("loadAgent", String.class);
-            UA.setAccessible(met, true);
-            met.invoke(null, absp);
-            return;
         } catch (Throwable e) {
             allFails.add(e);
         }
